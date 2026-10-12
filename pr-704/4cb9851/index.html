@@ -1,0 +1,20 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>#704 界面预览 · 4cb9851</title>
+<style>:root{color-scheme:light dark;--bg:#f6f6f7;--fg:#1d1d1f;--muted:#6e6e73;--card:#fff;--line:#e5e5ea}
+@media (prefers-color-scheme:dark){:root{--bg:#111113;--fg:#f2f2f4;--muted:#9a9aa0;--card:#1c1c1f;--line:#2c2c30}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:28px 16px 60px}h1{font-size:20px;margin:0 0 4px}.m{color:var(--muted);font-size:13px;margin:0 0 20px}
+video,img{display:block;width:100%;border-radius:10px;border:1px solid var(--line);background:var(--card)}figure{margin:0 0 28px}figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+a{color:inherit}</style>
+<main><h1>#704 界面预览</h1><p class="m">commit 4cb9851 · <a href="https://github.com/yetone/magpie/pull/704">回到 PR</a> · 用量页顶部新增「分析」入口，打开只读的质量与分析看板（可靠性、响应速度、费用与缓存六项图表，支持今天/7 天/30 天/全部与全部/按模型/按供应商/按Agent 维度、互斥筛选且悬停可单独清空）；点击排行行或 KPI 进入左右两栏的下钻页，右侧前 50 条调用可就地展开该次请求的路由详情，标题行右侧另有独立的「账号打码」按钮。</p>
+<figure><video src="preview.mp4" controls autoplay muted playsinline poster="poster.png"></video><figcaption>红线是鼠标走过的轨迹，红色圆环是一次点击；底部文字是这一步在做什么。空格暂停，← → 逐段查看。</figcaption></figure>
+<figure><img src="01-usage-analytics-entry.png" alt="用量页顶部的「分析」入口"><figcaption>用量页进入分析看板 · 用量页顶部的「分析」入口</figcaption></figure>
+<figure><img src="02-analytics-dashboard.png" alt="分析看板：可靠性、响应速度、费用与缓存三组图表"><figcaption>用量页进入分析看板 · 分析看板：可靠性、响应速度、费用与缓存三组图表</figcaption></figure>
+<figure><img src="03-analytics-by-model.png" alt="「按模型」维度下的各项排行"><figcaption>用量页进入分析看板 · 「按模型」维度下的各项排行</figcaption></figure>
+<figure><img src="04-filter-menu-open.png" alt="筛选弹层里的候选供应商"><figcaption>按供应商筛选与清空 · 筛选弹层里的候选供应商</figcaption></figure>
+<figure><img src="05-filter-clear-affordance.png" alt="已选筛选在悬停时出现的清空按钮"><figcaption>按供应商筛选与清空 · 已选筛选在悬停时出现的清空按钮</figcaption></figure>
+<figure><img src="06-filter-cleared.png" alt="清空后的筛选"><figcaption>按供应商筛选与清空 · 清空后的筛选</figcaption></figure>
+<figure><img src="07-analytics-drilldown.png" alt="下钻页：左侧排行，右侧该指标的前 50 条调用"><figcaption>下钻页与调用路由 · 下钻页：左侧排行，右侧该指标的前 50 条调用</figcaption></figure>
+<figure><img src="08-analytics-inline-route.png" alt="右侧就地展开该调用的路由详情"><figcaption>下钻页与调用路由 · 右侧就地展开该调用的路由详情</figcaption></figure>
+<figure><img src="09-analytics-drill-masked.png" alt="打码按钮打开后的下钻页"><figcaption>下钻页与调用路由 · 打码按钮打开后的下钻页</figcaption></figure>
+</main></html>

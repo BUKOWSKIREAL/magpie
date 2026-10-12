@@ -1,0 +1,76 @@
+{
+  "summary": "用量页顶部新增「分析」入口，打开只读的质量与分析看板（可靠性、响应速度、费用与缓存六项图表，支持今天/7 天/30 天/全部与全部/按模型/按供应商/按Agent 维度、互斥筛选且悬停可单独清空）；点击排行行或 KPI 进入左右两栏的下钻页，右侧前 50 条调用可就地展开该次请求的路由详情，标题行右侧另有独立的「账号打码」按钮。",
+  "scenes": [
+    {
+      "title": "用量页进入分析看板",
+      "shots": [
+        {
+          "file": "01-usage-analytics-entry.png",
+          "caption": "用量页顶部的「分析」入口",
+          "width": 2560
+        },
+        {
+          "file": "02-analytics-dashboard.png",
+          "caption": "分析看板：可靠性、响应速度、费用与缓存三组图表",
+          "width": 2560
+        },
+        {
+          "file": "03-analytics-by-model.png",
+          "caption": "「按模型」维度下的各项排行",
+          "width": 2560
+        }
+      ]
+    },
+    {
+      "title": "按供应商筛选与清空",
+      "shots": [
+        {
+          "file": "04-filter-menu-open.png",
+          "caption": "筛选弹层里的候选供应商",
+          "width": 2560
+        },
+        {
+          "file": "05-filter-clear-affordance.png",
+          "caption": "已选筛选在悬停时出现的清空按钮",
+          "width": 1120
+        },
+        {
+          "file": "06-filter-cleared.png",
+          "caption": "清空后的筛选",
+          "width": 1120
+        }
+      ]
+    },
+    {
+      "title": "下钻页与调用路由",
+      "shots": [
+        {
+          "file": "07-analytics-drilldown.png",
+          "caption": "下钻页：左侧排行，右侧该指标的前 50 条调用",
+          "width": 2560
+        },
+        {
+          "file": "08-analytics-inline-route.png",
+          "caption": "右侧就地展开该调用的路由详情",
+          "width": 2560
+        },
+        {
+          "file": "09-analytics-drill-masked.png",
+          "caption": "打码按钮打开后的下钻页",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [
+    "按供应商筛选与清空 · click .proto-menu.an-filter-menu .pm-item: nothing visible matches .proto-menu.an-filter-menu .pm-item with \"Sub2API\" (0 in the page)"
+  ],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "描述称「解码区间不足 100ms 的样本……被排除的样本数会在界面上显示」，diff 的界面上只有「{n} 个有效解码样本」，没有出现被排除样本数。描述还称点击调用后右侧切换为「单列 KV 详情」，diff 实际是就地把路由的图形与请求故事挂进右栏。",
+  "unseen": "沙盒窗口为 1280×800，看不到描述中 659px 窄窗口仍保持左右两栏的表现；下钻页里哪几条调用带 route_id 取决于真实数据，没有关联路由的记录点不开；「账号打码」只有在页面里出现邮箱/账号时才有可见变化。",
+  "interactive": true,
+  "pages": 1
+}

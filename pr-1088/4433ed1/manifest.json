@@ -1,0 +1,29 @@
+{
+  "summary": "Agent 页接入 OpenClaw：使用官方彩色图标（openclaw-color.svg，不再用单色 mask），未安装时在「安装其他 Agent」里给出 shell/PowerShell 与 npm 两条安装命令，接入后提示在 OpenClaw 的 /model 里选模型，并新增只读与 $include 配置的两条中文（及繁中/日/德）错误文案。",
+  "scenes": [
+    {
+      "title": "Agent 页：OpenClaw 的安装入口",
+      "shots": [
+        {
+          "file": "01-agents-install-folded.png",
+          "caption": "折叠状态下的「安装其他 Agent」",
+          "width": 2496
+        },
+        {
+          "file": "02-agents-install-openclaw.png",
+          "caption": "展开后的安装列表：OpenClaw 的图标与它下面的安装命令及复制按钮",
+          "width": 2496
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "沙盒里没有安装或配置 OpenClaw（无 openclaw CLI、无 ~/.openclaw），所以己安装/已接入状态看不到：Agent 列表里的 OpenClaw 行、彩色图标在行内的呈现、接入开关与断开还原、以及「在 /model 中选择模型」的提示文字；两条新错误文案（配置只读、配置使用 $include）需要存在对应状态的 OpenClaw 配置文件才会出现，本沙盒也无法复现。",
+  "interactive": true,
+  "pages": 1
+}

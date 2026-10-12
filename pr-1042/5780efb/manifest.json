@@ -1,0 +1,29 @@
+{
+  "summary": "这次改动只在 macOS 上改原生窗口外壳：在 macOS 26 上把主窗口从「带工具栏」的窗口改成普通标题栏窗口（圆角变小），红黄绿灯仍嵌在页面 header 里，sheet 起点和「另一个 App 在前时首次点击可拖动窗口」的行为保持原样；页面本身没有改。",
+  "scenes": [
+    {
+      "title": "主窗口顶部：改动所在的位置",
+      "shots": [
+        {
+          "file": "01-main-window.png",
+          "caption": "主窗口整体：这次改的是窗口自身的外壳，页面不变",
+          "width": 2560
+        },
+        {
+          "file": "02-window-top-header.png",
+          "caption": "窗口最顶部这一条 header：Mac 上信号灯嵌在这里，窗口圆角就是本次改动；浏览器里看不到窗口边框，看不到差别",
+          "width": 2232
+        }
+      ]
+    }
+  ],
+  "video": null,
+  "poster": null,
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "改动全部在 macOS 的原生窗口外壳上（窗口圆角、红黄绿灯位置、sheet 起始位置、非前台窗口首次点击拖动窗口的范围），而且要 macOS 26 且程序链接的是 macOS 26 及以后 SDK 才生效；沙箱是 1280×800 的浏览器页面，没有 macOS 的窗口边框、信号灯和工具栏，也没有 macOS 26，因此圆角、信号灯、sheet、拖动这几处差异都看不到。只能展示改动所在的位置——主窗口顶部那一条 header；另外描述里的右到左语言、全屏、以及旧设计下保留工具栏等分支同样无法在此呈现。",
+  "interactive": false,
+  "pages": 1
+}
