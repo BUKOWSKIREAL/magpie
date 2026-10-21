@@ -2365,6 +2365,18 @@ func pricedNames(model string) []string {
 	if model == "codex-auto-review" {
 		out = append(out, "gpt-5.6-luna")
 	}
+	if base, ok := strings.CutSuffix(model, "-n"); ok && strings.HasPrefix(base, "gemini") {
+		out = append(out, base)
+	}
+	if base, ok := strings.CutSuffix(model, "-trial"); ok && strings.HasPrefix(base, "gemini") {
+		out = append(out, base)
+	}
+	if fam := EffortFamily(model); fam != model && (strings.HasPrefix(fam, "gemini") || strings.HasPrefix(fam, "claude")) {
+		out = append(out, fam)
+	}
+	if base, ok := strings.CutSuffix(model, "-thinking"); ok && strings.HasPrefix(base, "claude") {
+		out = append(out, base)
+	}
 	if m := grokWindow.FindStringSubmatch(strings.ToLower(strings.TrimSpace(model))); m != nil {
 		out = append(out, m[1])
 	}

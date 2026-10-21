@@ -675,7 +675,9 @@ func Dirs() []string {
 		{AlmaDir(), almaDB()},
 		{MiniMaxDir(), minimaxSessions()},
 		{KimiCodeDir(), kimiSessions()},
+		{AntigravityDir(), agyConversationsDir()},
 		{AgyDir(), filepath.Join(AgyDir(), "brain")},
+		{AgyDir(), filepath.Join(AgyDir(), "conversations")},
 	} {
 		if _, err := os.Stat(d.sessions); err != nil {
 			continue

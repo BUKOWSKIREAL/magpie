@@ -1565,6 +1565,63 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 			matched[ref.rowRef], used[calls[k].at(j)] = true, true
 		}
 	}
+	byRespID := map[string][]rowRef{}
+	for _, gateway := range gateways {
+		for i := range gateway.Rows {
+			ref := rowRef{gateway, i}
+			if reserved[ref] || used[ref] {
+				continue
+			}
+			p := &gateway.Rows[i]
+			if (p.Flags&4 != 0 || gateway.text(p, 1) == 0 && p.Status >= 400) || p.Time.Before(gatewaySince) {
+				continue
+			}
+			if id := gateway.Strings[gateway.text(p, 25)]; id != "" {
+				byRespID[id] = append(byRespID[id], ref)
+			}
+		}
+	}
+	if len(byRespID) > 0 {
+		byResp := map[string][]timedRef{}
+		for _, c := range chunks {
+			open := rows.of(c)
+			for i := range open.Rows {
+				p := &open.Rows[i]
+				ref := rowRef{c, i}
+				if skip[ref] || reserved[ref] || matched[ref] || p.Time.Before(since) {
+					continue
+				}
+				if id := open.Strings[open.text(p, 25)]; id != "" && len(byRespID[id]) > 0 {
+					if _, ok := byResp[id]; !ok {
+						id = strings.Clone(id)
+					}
+					byResp[id] = append(byResp[id], timedOf(ref, p))
+				}
+			}
+		}
+		for id, refs := range byResp {
+			if newestIDs {
+				slices.SortFunc(refs, func(a, b timedRef) int {
+					if a.newer(b) {
+						return -1
+					}
+					if b.newer(a) {
+						return 1
+					}
+					return 0
+				})
+			}
+			for j, ref := range refs {
+				if j >= len(byRespID[id]) {
+					break
+				}
+				if used[byRespID[id][j]] {
+					continue
+				}
+				matched[ref.rowRef], used[byRespID[id][j]] = true, true
+			}
+		}
+	}
 	// keyOf is the key of a gateway call the local calls left without a
 	// request id may match, ok false for one they never do
 	keyOf := func(gateway *rowChunk, i int) (matchKey, bool) {
