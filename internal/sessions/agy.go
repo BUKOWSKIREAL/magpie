@@ -56,14 +56,17 @@ type agySummary struct {
 	Last time.Time
 }
 
-// agySummaries is conversation_summaries.db's rows, read again only when
-// the database (or its write-ahead log) changed. A read that fails keeps
-// the rows read before.
-var agySummaries struct {
-	sync.Mutex
-	path string
+type agySummaryCache struct {
 	rev  string
 	rows map[string]agySummary
+}
+
+// agySummaries is conversation_summaries.db's rows per directory, read
+// again only when the database (or its write-ahead log) changed. A read
+// that fails keeps the rows read before.
+var agySummaryStore struct {
+	sync.Mutex
+	byPath map[string]agySummaryCache
 }
 
 // agySummariesOf are the rows of the conversation_summaries.db in dir.
@@ -77,19 +80,22 @@ func agySummariesOf(dir string) map[string]agySummary {
 			return nil
 		}
 	}
-	agySummaries.Lock()
-	defer agySummaries.Unlock()
-	if agySummaries.path == path && agySummaries.rev == rev {
-		return agySummaries.rows
+	agySummaryStore.Lock()
+	defer agySummaryStore.Unlock()
+	if c, ok := agySummaryStore.byPath[path]; ok && c.rev == rev {
+		return c.rows
 	}
 	rows, ok := readAgySummaries(path)
 	if !ok {
-		if agySummaries.path == path {
-			return agySummaries.rows
+		if c, ok := agySummaryStore.byPath[path]; ok {
+			return c.rows
 		}
 		return nil
 	}
-	agySummaries.path, agySummaries.rev, agySummaries.rows = path, rev, rows
+	if agySummaryStore.byPath == nil {
+		agySummaryStore.byPath = map[string]agySummaryCache{}
+	}
+	agySummaryStore.byPath[path] = agySummaryCache{rev: rev, rows: rows}
 	return rows
 }
 
@@ -105,9 +111,14 @@ func readAgySummaries(path string) (map[string]agySummary, bool) {
 }
 
 func agyRows(db *sql.DB) (map[string]agySummary, bool) {
+	hasLast := true
 	rows, err := db.Query("SELECT conversation_id, title, workspace_uris, last_modified_time FROM conversation_summaries")
 	if err != nil {
-		return nil, false
+		hasLast = false
+		rows, err = db.Query("SELECT conversation_id, title, workspace_uris FROM conversation_summaries")
+		if err != nil {
+			return nil, false
+		}
 	}
 	defer rows.Close()
 	out := map[string]agySummary{}
@@ -115,7 +126,13 @@ func agyRows(db *sql.DB) (map[string]agySummary, bool) {
 		var id string
 		var t, ws sql.NullString
 		var last any
-		if rows.Scan(&id, &t, &ws, &last) != nil || id == "" {
+		var scanErr error
+		if hasLast {
+			scanErr = rows.Scan(&id, &t, &ws, &last)
+		} else {
+			scanErr = rows.Scan(&id, &t, &ws)
+		}
+		if scanErr != nil || id == "" {
 			continue
 		}
 		var uris []string
@@ -125,6 +142,9 @@ func agyRows(db *sql.DB) (map[string]agySummary, bool) {
 			if s.Cwd = agyFolder(u, runtime.GOOS); s.Cwd != "" {
 				break
 			}
+		}
+		if s.Cwd == "" {
+			s.Cwd = agyWorkspacePath(ws.String)
 		}
 		out[id] = s
 	}
@@ -195,43 +215,73 @@ func agyTranscripts(dir string) []file {
 	return out
 }
 
-// agyFiles are agy's conversations on this computer, each with its row of
-// conversation_summaries.db: rev is that row, so a title agy writes after
-// the transcript reads the conversation again, and only that one.
-func agyFiles() []file { return agyFilesIn(AgyDir()) }
+// agyFiles are Antigravity's conversations on this computer across both
+// Desktop (~/.gemini/antigravity) and CLI (~/.gemini/antigravity-cli), each
+// with its row of conversation_summaries.db: rev is that row, so a title
+// written after the transcript or database reads the conversation again,
+// and only that one.
+func agyFiles() []file {
+	var out []file
+	seen := map[string]bool{}
+	for _, dir := range []string{AntigravityDir(), AgyDir()} {
+		for _, f := range agyFilesIn(dir) {
+			id := strings.TrimPrefix(f.key, "agy:")
+			if seen[id] {
+				continue
+			}
+			seen[id] = true
+			out = append(out, f)
+		}
+	}
+	return out
+}
 
-// agyFilesIn is agyFiles of the agy data folder dir. A conversation with a
-// row and no transcript (#1718: agy keeps each one's
-// steps in conversations/<id>.db too, protobuf this doesn't read) is
-// listed from its row alone: its title, folder and time, and no tokens.
+// agyFilesIn is agyFiles of the Antigravity data folder dir. A conversation
+// with a database in conversations/<id>.db and no transcript is read from
+// its SQLite database (and its conversation_summaries.db row when present).
 func agyFilesIn(dir string) []file {
 	if !Reads("agy") {
 		return nil
 	}
 	out := agyTranscripts(dir)
 	rows := agySummariesOf(dir)
-	if len(out) == 0 && len(rows) == 0 {
-		return nil
-	}
 	has := make(map[string]bool, len(out))
 	for i := range out {
 		id := strings.TrimPrefix(out[i].key, "agy:")
 		has[id] = true
+		m := out[i].w()
+		m.sid = id
 		if r, ok := rows[id]; ok {
-			out[i].w().agy = &r
-			out[i].w().rev = agyRev(r)
+			rCopy := r
+			m.agy = &rCopy
+			m.rev = agyRev(r)
+		}
+		dbFile := file{path: filepath.Join(dir, "conversations", id+".db")}
+		if agyStat(&dbFile) {
+			m.rev += "\x00" + strconv.FormatInt(dbFile.size, 10) + ":" + strconv.FormatInt(dbFile.mod.UnixNano(), 10)
 		}
 	}
-	for id, r := range rows {
+	convDir := filepath.Join(dir, "conversations")
+	for _, e := range readDirectory(convDir) {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".db") {
+			continue
+		}
+		id := strings.TrimSuffix(e.Name(), ".db")
 		if has[id] || !safeID.MatchString(id) {
 			continue
 		}
-		f := file{agent: "agy", key: "agy:" + id, path: filepath.Join(dir, "conversations", id+".db"), main: true}
-		if stat(&f) {
-			m := f.w()
-			m.agy, m.rev = &r, agyRev(r)
-			out = append(out, f)
+		f := file{agent: "agy", key: "agy:" + id, path: filepath.Join(convDir, e.Name()), main: true}
+		if !agyStat(&f) {
+			continue
 		}
+		has[id] = true
+		m := f.w()
+		m.sid = id
+		if r, ok := rows[id]; ok {
+			rCopy := r
+			m.agy, m.rev = &rCopy, agyRev(r)
+		}
+		out = append(out, f)
 	}
 	return out
 }
@@ -283,14 +333,7 @@ const agyModel = "agy"
 // the file has only grown (agy appends a step at a time).
 func parseAgy(f file, old *state) *state {
 	if agyRowOnly(f.path) {
-		s := &state{Size: f.size, Mod: f.mod.UnixNano(), DBRevision: f.m().rev}
-		if f.m().agy != nil {
-			s.Named, s.Cwd = title(f.m().agy.Title), f.m().agy.Cwd
-			if !f.m().agy.Last.IsZero() {
-				s.saw(f.m().agy.Last, true)
-			}
-		}
-		return s
+		return parseAntigravity(f)
 	}
 	var s *state
 	c := agyCarry{Last: -1}
@@ -319,6 +362,28 @@ func parseAgy(f file, old *state) *state {
 		s.Named, s.Cwd = title(f.m().agy.Title), f.m().agy.Cwd
 	}
 	s.Agy = &c
+	if id := strings.TrimPrefix(f.key, "agy:"); id != "" && id != f.key {
+		root := filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(f.path)))))
+		dbFile := file{agent: "agy", key: f.key, path: filepath.Join(root, "conversations", id+".db"), main: true}
+		if agyStat(&dbFile) {
+			if usages, _, _, err := agyReadDB(dbFile); err == nil && len(usages) > 0 {
+				if i, ok := s.Models.find(agyModel); ok {
+					s.Models = append(s.Models[:i], s.Models[i+1:]...)
+				}
+				for _, de := range s.Days {
+					if de.v != nil {
+						if i, ok := de.v.Models.find(agyModel); ok {
+							de.v.Models = append(de.v.Models[:i], de.v.Models[i+1:]...)
+						}
+					}
+				}
+				for _, u := range usages {
+					s.saw(u.at, true)
+					s.use(dateOf(u.at), u.model, u.tokens)
+				}
+			}
+		}
+	}
 	return s
 }
 
@@ -464,7 +529,7 @@ func agyParts(l agyLine) []Part {
 
 // forgetAgySummaries forgets the rows read of conversation_summaries.db.
 func forgetAgySummaries() {
-	agySummaries.Lock()
-	agySummaries.path, agySummaries.rev, agySummaries.rows = "", "", nil
-	agySummaries.Unlock()
+	agySummaryStore.Lock()
+	agySummaryStore.byPath = nil
+	agySummaryStore.Unlock()
 }
