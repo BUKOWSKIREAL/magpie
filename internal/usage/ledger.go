@@ -360,6 +360,9 @@ func logRecord(c sessions.Call) Record {
 		r.ResponseID = c.ResponseID
 		r.Compaction = codexCompactionOf(c)
 	}
+	if c.Agent == "agy" {
+		r.ResponseID = c.ResponseID
+	}
 	if c.Agent == "codex" || c.Agent == "opencode" {
 		r.Requested, r.Served = c.Model, ""
 	}

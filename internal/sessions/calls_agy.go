@@ -42,8 +42,26 @@ func AgyDir() string {
 	return filepath.Join(home, ".gemini", "antigravity-cli")
 }
 
-// agyCallFiles are each conversation's transcript_full.jsonl.
-func agyCallFiles() []file { return agyTranscripts(AgyDir()) }
+// agyCallFiles are Antigravity's conversation databases (~/.gemini/antigravity
+// and ~/.gemini/antigravity-cli), plus any conversation's transcript_full.jsonl
+// that has no database.
+func agyCallFiles() []file {
+	out := agyDBFiles()
+	seen := make(map[string]bool, len(out))
+	for _, f := range out {
+		seen[strings.TrimPrefix(f.key, "agy:")] = true
+	}
+	for _, root := range []string{AgyDir(), AntigravityDir()} {
+		for _, f := range agyTranscripts(root) {
+			id := strings.TrimPrefix(f.key, "agy:")
+			if !seen[id] {
+				seen[id] = true
+				out = append(out, f)
+			}
+		}
+	}
+	return out
+}
 
 type agyStep struct {
 	Step      *int   `json:"step_index"`
@@ -56,9 +74,21 @@ type agyStep struct {
 
 var agyTokens = []byte(`"output_tokens"`)
 
-// readAgyCalls reads a transcript whole: agy may write a step's line again
-// as it finishes, and a step is counted once by its index.
+// readAgyCalls reads an Antigravity SQLite conversation database when f names
+// one, or a transcript_full.jsonl whole.
 func readAgyCalls(f file) (*callFile, bool) {
+	if strings.HasSuffix(f.path, ".db") {
+		if st, ok := readAntigravityCalls(f); ok {
+			return st, true
+		}
+		id := strings.TrimPrefix(f.key, "agy:")
+		root := filepath.Dir(filepath.Dir(f.path))
+		p := filepath.Join(root, "brain", id, ".system_generated", "logs", "transcript_full.jsonl")
+		if !fileExists(p) {
+			return &callFile{Path: f.path, Agent: "agy", Session: id}, false
+		}
+		f.path = p
+	}
 	r, err := os.Open(f.path)
 	if err != nil {
 		return &callFile{Path: f.path, Agent: "agy"}, false
