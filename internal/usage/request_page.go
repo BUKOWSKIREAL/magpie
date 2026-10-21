@@ -856,6 +856,59 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 			matched[ref], used[byID[id][j]] = true, true
 		}
 	}
+	byRespID := map[string][]rowRef{}
+	for _, gateway := range gateways {
+		for i := range gateway.Rows {
+			ref := rowRef{gateway, i}
+			if reserved[ref] || used[ref] {
+				continue
+			}
+			p := &gateway.Rows[i]
+			if (p.Flags&4 != 0 || p.Text[1] == 0 && p.Status >= 400) || p.Time.Before(gatewaySince) {
+				continue
+			}
+			if id := gateway.Strings[p.Text[25]]; id != "" {
+				byRespID[id] = append(byRespID[id], ref)
+			}
+		}
+	}
+	if len(byRespID) > 0 {
+		byResp := map[string][]rowRef{}
+		for _, c := range chunks {
+			for i := range c.Rows {
+				p := &c.Rows[i]
+				ref := rowRef{c, i}
+				if skip[ref] || reserved[ref] || matched[ref] || p.Time.Before(since) {
+					continue
+				}
+				if id := c.Strings[p.Text[25]]; id != "" && len(byRespID[id]) > 0 {
+					byResp[id] = append(byResp[id], ref)
+				}
+			}
+		}
+		for id, refs := range byResp {
+			if newestIDs {
+				slices.SortFunc(refs, func(a, b rowRef) int {
+					if refNewer(a, b) {
+						return -1
+					}
+					if refNewer(b, a) {
+						return 1
+					}
+					return 0
+				})
+			}
+			for j, ref := range refs {
+				if j >= len(byRespID[id]) {
+					break
+				}
+				if used[byRespID[id][j]] {
+					continue
+				}
+				matched[ref], used[byRespID[id][j]] = true, true
+			}
+		}
+	}
 	groups := map[matchKey]*matchGroup{}
 	for _, gateway := range gateways {
 		for i := range gateway.Rows {

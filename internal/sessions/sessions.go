@@ -412,6 +412,7 @@ type file struct {
 	hermes   *hermesDB
 	// Alma: its database, and what tells the chat's rows changed
 	alma     *almaStore
+	agy      *agyStore
 	rev      string
 	readOnly bool
 	editor   *cursorEditorMeta
@@ -501,7 +502,7 @@ func allFiles() []file {
 	var out []file
 	for _, fs := range [][]file{callFiles(), openCodeFiles(), piFiles(),
 		wslFiles("pi", "omp", "kimi"), zcodeFiles(), dshFiles(), clineFiles(), ccFiles("qoder", QoderDir("qoder")), ccFiles("qoder-cn", QoderDir("qoder-cn")),
-		grokFiles(), workbuddyFiles(), codebuddyFiles(), droidFiles(), ompFiles(), cursorFiles(), hermesFiles(), almaFiles(), kimiFiles()} {
+		grokFiles(), workbuddyFiles(), codebuddyFiles(), droidFiles(), ompFiles(), cursorFiles(), hermesFiles(), almaFiles(), kimiFiles(), agyFiles()} {
 		out = append(out, fs...)
 	}
 	return distinctPaths(out)
@@ -547,6 +548,8 @@ func Dirs() []string {
 		{AlmaDir(), almaDB()},
 		{MiniMaxDir(), minimaxSessions()},
 		{KimiCodeDir(), kimiSessions()},
+		{AntigravityDir(), agyConversationsDir()},
+		{AgyDir(), filepath.Join(AgyDir(), "conversations")},
 	} {
 		if _, err := os.Stat(d.sessions); err != nil {
 			continue
@@ -1336,6 +1339,8 @@ func parserFor(agent string) sessionParser {
 		return sessionParser{grow: parseDroid}
 	case "cursor":
 		return sessionParser{whole: parseCursor}
+	case "agy":
+		return sessionParser{whole: parseAntigravity}
 	case "codex":
 		return sessionParser{line: codexBody}
 	case "pi", "omp":
