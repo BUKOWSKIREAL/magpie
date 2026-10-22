@@ -864,10 +864,10 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 				continue
 			}
 			p := &gateway.Rows[i]
-			if (p.Flags&4 != 0 || p.Text[1] == 0 && p.Status >= 400) || p.Time.Before(gatewaySince) {
+			if (p.Flags&4 != 0 || gateway.text(p, 1) == 0 && p.Status >= 400) || p.Time.Before(gatewaySince) {
 				continue
 			}
-			if id := gateway.Strings[p.Text[25]]; id != "" {
+			if id := gateway.Strings[gateway.text(p, 25)]; id != "" {
 				byRespID[id] = append(byRespID[id], ref)
 			}
 		}
@@ -881,7 +881,7 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip map[rowRef]boo
 				if skip[ref] || reserved[ref] || matched[ref] || p.Time.Before(since) {
 					continue
 				}
-				if id := c.Strings[p.Text[25]]; id != "" && len(byRespID[id]) > 0 {
+				if id := c.Strings[c.text(p, 25)]; id != "" && len(byRespID[id]) > 0 {
 					byResp[id] = append(byResp[id], ref)
 				}
 			}
