@@ -1,0 +1,157 @@
+name: Sync Upstream & Release Patched Magpie
+
+on:
+  schedule:
+    - cron: '15 */4 * * *'
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: 'Force rebuild even if latest tag release already exists'
+        required: false
+        default: 'false'
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    name: Sync upstream and check latest tag
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+      tag: ${{ steps.check.outputs.tag }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync with yetone/magpie and rebase local patches
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE_BUILD: ${{ github.event.inputs.force_build || 'false' }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git remote add upstream https://github.com/yetone/magpie.git || true
+          git fetch upstream main --tags
+
+          LATEST_TAG="$(git describe --tags --abbrev=0 upstream/main)"
+          VERSION="${LATEST_TAG#v}"
+          echo "Latest upstream tag: $LATEST_TAG (version $VERSION)"
+          echo "tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          # Rebase fork patches onto latest upstream/main
+          git rebase upstream/main
+          git push origin HEAD:main --force-with-lease
+          git push origin "$LATEST_TAG" --force || true
+
+          if [[ "$FORCE_BUILD" == "true" ]]; then
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Check if release with latest.json and magpie-darwin-arm64.zip already exists
+          if gh release view "$LATEST_TAG" -R "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' 2>/dev/null | grep -q '^latest\.json$'; then
+            echo "Release $LATEST_TAG already exists with latest.json; skipping build."
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Release $LATEST_TAG not published yet; triggering build."
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-macos:
+    name: Build macOS App & Publish Release
+    needs: sync
+    if: needs.sync.outputs.should_build == 'true'
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ needs.sync.outputs.tag }}
+      VERSION: ${{ needs.sync.outputs.version }}
+    steps:
+      - name: Checkout synced fork
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run Antigravity session tests
+        run: go test ./internal/sessions/... -run 'TestAntigravity|TestAgy'
+
+      - name: Build magpie.app and CLI binary (version ${{ needs.sync.outputs.tag }})
+        run: |
+          set -euo pipefail
+          GOARCH=arm64 CGO_ENABLED=1 make app VERSION="$TAG" \
+            CGO_CFLAGS="-arch arm64 -mmacosx-version-min=12.0" \
+            CGO_LDFLAGS="-arch arm64 -mmacosx-version-min=12.0"
+          file magpie.app/Contents/MacOS/magpie | grep -q 'arm64'
+          codesign --force --deep --sign - magpie.app
+          codesign --verify --deep --strict magpie.app
+          ditto -c -k --keepParent magpie.app magpie-darwin-arm64.zip
+          cp magpie.app/Contents/MacOS/magpie magpie-cli-darwin-arm64
+          chmod 0755 magpie-cli-darwin-arm64
+
+      - name: Generate latest.json and publish GitHub Release
+        run: |
+          set -euo pipefail
+          NOTES="$(gh release view "$TAG" -R yetone/magpie-releases --json body -q .body 2>/dev/null || echo "Synced with upstream $TAG + Antigravity Desktop/CLI SQLite usage tracking (#3115).")"
+
+          APP_SIZE=$(stat -f%z magpie-darwin-arm64.zip)
+          APP_SHA256=$(shasum -a 256 magpie-darwin-arm64.zip | awk '{print $1}')
+          CLI_SIZE=$(stat -f%z magpie-cli-darwin-arm64)
+          CLI_SHA256=$(shasum -a 256 magpie-cli-darwin-arm64 | awk '{print $1}')
+
+          REPO_URL="https://github.com/${GITHUB_REPOSITORY}"
+          DL_BASE="${REPO_URL}/releases/download/${TAG}"
+
+          jq -n \
+            --arg version "$VERSION" \
+            --arg notes "$NOTES" \
+            --arg url "${REPO_URL}/releases/tag/${TAG}" \
+            --arg app_url "${DL_BASE}/magpie-darwin-arm64.zip" \
+            --argjson app_size "$APP_SIZE" \
+            --arg app_sha "$APP_SHA256" \
+            --arg cli_url "${DL_BASE}/magpie-cli-darwin-arm64" \
+            --argjson cli_size "$CLI_SIZE" \
+            --arg cli_sha "$CLI_SHA256" \
+            '{
+              version: $version,
+              notes: $notes,
+              url: $url,
+              assets: {
+                "magpie-darwin-arm64.zip": {
+                  url: $app_url,
+                  size: $app_size,
+                  sha256: $app_sha
+                },
+                "magpie-cli-darwin-arm64": {
+                  url: $cli_url,
+                  size: $cli_size,
+                  sha256: $cli_sha
+                }
+              }
+            }' > latest.json
+
+          cat latest.json
+          printf '%s\n' "$NOTES" > notes.md
+
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --title "magpie $TAG (Antigravity patch)" --notes-file notes.md --latest
+            gh release upload "$TAG" magpie-darwin-arm64.zip magpie-cli-darwin-arm64 latest.json -R "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$TAG" magpie-darwin-arm64.zip magpie-cli-darwin-arm64 latest.json -R "$GITHUB_REPOSITORY" --title "magpie $TAG (Antigravity patch)" --notes-file notes.md --latest
+          fi
