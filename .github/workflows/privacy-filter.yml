@@ -1,5 +1,5 @@
 # Builds pf-serve, the program that runs Settings → Privacy's local
-# masking model (native/privacy-filter, internal/pii), for each system.
+# masking model (native/privacy-filter, internal/pii), for macOS.
 # A change to it is built on every push; a pf-v* tag publishes the zips as
 # a prerelease of this repo, never Latest, whose sha256s internal/pii pins.
 name: privacy-filter
@@ -23,32 +23,18 @@ jobs:
       matrix:
         include:
           - { target: darwin-arm64, os: macos-15 }
-          - { target: darwin-amd64, os: macos-15 }
-          # the oldest glibc a runner has, so the program runs on older systems too
-          - { target: linux-amd64, os: ubuntu-22.04 }
-          - { target: linux-arm64, os: ubuntu-22.04-arm }
-          - { target: windows-amd64, os: ubuntu-24.04 }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - name: tools (macOS)
         if: runner.os == 'macOS'
         run: brew install ninja
-      - name: tools (Linux)
-        # no glslc in Ubuntu 22.04: build.sh takes LunarG's
-        if: startsWith(matrix.target, 'linux')
-        run: sudo apt-get update && sudo apt-get install -y ninja-build libvulkan-dev xz-utils zip
-      - name: tools (Windows, cross)
-        if: matrix.target == 'windows-amd64'
-        run: sudo apt-get update && sudo apt-get install -y ninja-build mingw-w64 glslc zip
       - name: build
         run: native/privacy-filter/build.sh ${{ matrix.target }} pf-serve-${{ matrix.target }}.zip
       - name: starts
-        # each program the runner can start runs to its usage line
-        if: matrix.target != 'windows-amd64' && matrix.target != 'darwin-amd64'
         run: |
           mkdir t && cd t && unzip -q ../pf-serve-${{ matrix.target }}.zip
-          for p in pf-serve pf-serve-vulkan; do
+          for p in pf-serve; do
             [ -f "$p" ] || continue
             ./"$p" | tee out.txt; grep -q usage out.txt
           done
@@ -60,7 +46,7 @@ jobs:
   release:
     if: startsWith(github.ref, 'refs/tags/pf-v')
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: macos-15
     permissions:
       contents: write
     steps:
@@ -71,7 +57,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sha256sum pf-serve-*.zip | tee SHA256SUMS
+          shasum -a 256 pf-serve-*.zip | tee SHA256SUMS
           gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --prerelease --latest=false \
             --title "pf-serve $GITHUB_REF_NAME" \
             --notes "pf-serve, which runs the local masking model of Settings → Privacy (native/privacy-filter). Not a magpie release: magpie downloads these itself, checked against the sha256s in internal/pii." \
