@@ -89,8 +89,8 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Run Antigravity session tests
-        run: go test ./internal/sessions/... -run 'TestAntigravity|TestAgy'
+      - name: Run session and usage tests
+        run: go test ./internal/sessions/... ./internal/usage/...
 
       - name: Build magpie.app and CLI binary (version ${{ needs.sync.outputs.tag }})
         run: |
