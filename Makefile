@@ -7,32 +7,24 @@ ifneq ($(shell sed -n 's/^module //p' go.mod 2>/dev/null),github.com/yetone/magp
   $(error run make in magpie's folder (make -C path/to/magpie), not in $(CURDIR))
 endif
 
+ifneq ($(or $(GOOS),$(shell go env GOOS)),darwin)
+  $(error this fork builds macOS only; run make on macOS with GOOS=darwin)
+endif
+
 # A tag may hold $, ( or `, which the shell lines below would run: the
 # version keeps only what a version is spelled with.
 VERSION ?= $(or $(shell git describe --tags --always --dirty 2>/dev/null | tr -cd 'A-Za-z0-9._+-'),dev)
 LDFLAGS  = -s -w -X main.version=$(VERSION)
 TAGS     = production
-TARGETS  = darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64 windows/arm64 android/arm64
 
-# The GUI links the platform webview through cgo, so it is built natively.
-# `nogui` builds the terminal-only magpie, which cross-compiles anywhere.
+# The macOS GUI links the native webview through cgo.
+# `nogui` builds the terminal-only macOS executable.
 # macOS 12 is the oldest Go (1.25 and later) runs on; Info.plist says so too.
 ifeq ($(shell uname -s),Darwin)
   export CGO_CFLAGS  = -mmacosx-version-min=12.0
   export CGO_LDFLAGS = -mmacosx-version-min=12.0
 endif
-# On Linux, GTK 3 and WebKitGTK 4.1: older distributions have them, where
-# Wails' default GTK 4 and WebKitGTK 6 would leave them out.
-ifeq ($(shell uname -s),Linux)
-  TAGS += gtk3
-endif
-# Termux uses Android's libc and has no desktop webview. Keep the web UI
-# and terminal commands, without linking GTK or Wails.
-ifeq ($(shell go env GOOS),android)
-  TAGS = nogui
-endif
-
-.PHONY: build cli install test test-ui app icons release release-cli release-windows release-linux clean dev dev-once
+.PHONY: build cli install test test-ui app icons release release-cli clean dev dev-once
 
 build:
 	go build -tags "$(TAGS)" -trimpath -ldflags="$(LDFLAGS)" -o magpie .
@@ -94,41 +86,10 @@ release: clean build
 
 release-cli:
 	@mkdir -p dist
-	@for t in $(TARGETS); do \
-		os=$${t%/*}; arch=$${t#*/}; ext=""; [ $$os = windows ] && ext=.exe; \
-		echo "  $$os/$$arch (cli)"; \
-		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -tags nogui -trimpath -ldflags="$(LDFLAGS)" -o dist/magpie-cli-$$os-$$arch$$ext . || exit 1; \
-	done
-
-# The desktop app for Windows: the system WebView2 needs no cgo, so both
-# arches cross-compile. Linked as a GUI program (no console window), with
-# the icon, version and a DPI-aware manifest from build/windows. It carries
-# magpie.com, the console program a terminal runs for `magpie` and waits
-# for, which it writes beside itself (internal/update/com.go, #3737).
-# The launcher is built without the commit stamped in (-buildvcs=false):
-# magpie.com is written again whenever its bytes differ, and with the
-# commit in them every release wrote a new one though the launcher was the
-# same (TestLauncherSameAtEveryCommit).
-WINVER = $(shell echo $(VERSION) | sed -E 's/^v//; s/[^0-9.].*//')
-release-windows:
-	@mkdir -p dist
-	@go run github.com/tc-hib/go-winres@v0.3.3 make --in build/windows/winres.json --arch amd64,arm64 --out rsrc \
-		--file-version "$(or $(WINVER),0.0.0)" --product-version "$(or $(WINVER),0.0.0)"
-	@for arch in amd64 arm64; do \
-		echo "  windows/$$arch (app)"; \
-		CGO_ENABLED=0 GOOS=windows GOARCH=$$arch go build -trimpath -buildvcs=false -ldflags="-s -w" -o internal/update/launcher-$$arch.com ./internal/update/launcher || exit 1; \
-		CGO_ENABLED=0 GOOS=windows GOARCH=$$arch go build -tags production,comlauncher -trimpath -ldflags="$(LDFLAGS) -H windowsgui" -o dist/magpie-windows-$$arch.exe . || exit 1; \
-	done; rm -f rsrc_windows_*.syso internal/update/launcher-*.com
-
-# The desktop app for Linux links GTK 3 and WebKitGTK 4.1 through cgo, so it
-# is built natively, one arch per machine.
-release-linux:
-	@mkdir -p dist
-	@echo "  linux/$(shell go env GOARCH) (app)"
-	@go build -tags "$(TAGS)" -trimpath -ldflags="$(LDFLAGS)" -o dist/magpie-linux-$(shell go env GOARCH) .
+	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -tags nogui -trimpath -ldflags="$(LDFLAGS)" -o dist/magpie-cli-darwin-arm64 .
 
 clean:
-	rm -rf magpie magpie.exe magpie.app dist rsrc_windows_*.syso internal/update/launcher-*.com
+	rm -rf magpie magpie.app dist
 
 # Development: the UI is served from internal/gui/assets and the window
 # reloads itself when a file there is saved. With fswatch installed, the
