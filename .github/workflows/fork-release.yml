@@ -14,6 +14,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: fork-release
+  cancel-in-progress: false
+
 jobs:
   sync:
     name: Sync upstream and check latest tag
@@ -22,6 +26,7 @@ jobs:
       should_build: ${{ steps.check.outputs.should_build }}
       tag: ${{ steps.check.outputs.tag }}
       version: ${{ steps.check.outputs.version }}
+      commit: ${{ steps.check.outputs.commit }}
     steps:
       - name: Checkout fork
         uses: actions/checkout@v4
@@ -39,9 +44,11 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git remote add upstream https://github.com/yetone/magpie.git || true
-          git fetch upstream main --tags
+          # Fork release tags point at patched commits; keep upstream tags separate.
+          git fetch --no-tags upstream '+refs/heads/main:refs/remotes/upstream/main' '+refs/tags/*:refs/tags/upstream/*'
 
-          LATEST_TAG="$(git describe --tags --abbrev=0 upstream/main)"
+          UPSTREAM_TAG="$(git describe --tags --match 'upstream/v*' --abbrev=0 upstream/main)"
+          LATEST_TAG="${UPSTREAM_TAG#upstream/}"
           VERSION="${LATEST_TAG#v}"
           echo "Latest upstream tag: $LATEST_TAG (version $VERSION)"
           echo "tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
@@ -50,7 +57,7 @@ jobs:
           # Rebase fork patches onto latest upstream/main
           git rebase upstream/main
           git push origin HEAD:main --force-with-lease
-          git push origin "$LATEST_TAG" --force || true
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
           if [[ "$FORCE_BUILD" == "true" ]]; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
@@ -80,7 +87,7 @@ jobs:
       - name: Checkout synced fork
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ needs.sync.outputs.commit }}
           fetch-depth: 0
 
       - name: Setup Go
@@ -153,5 +160,5 @@ jobs:
             gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --title "magpie $TAG (Antigravity patch)" --notes-file notes.md --latest
             gh release upload "$TAG" magpie-darwin-arm64.zip magpie-cli-darwin-arm64 latest.json -R "$GITHUB_REPOSITORY" --clobber
           else
-            gh release create "$TAG" magpie-darwin-arm64.zip magpie-cli-darwin-arm64 latest.json -R "$GITHUB_REPOSITORY" --title "magpie $TAG (Antigravity patch)" --notes-file notes.md --latest
+            gh release create "$TAG" magpie-darwin-arm64.zip magpie-cli-darwin-arm64 latest.json -R "$GITHUB_REPOSITORY" --target "$(git rev-parse HEAD)" --title "magpie $TAG (Antigravity patch)" --notes-file notes.md --latest
           fi
