@@ -47,8 +47,16 @@ jobs:
           # Fork release tags point at patched commits; keep upstream tags separate.
           git fetch --no-tags upstream '+refs/heads/main:refs/remotes/upstream/main' '+refs/tags/*:refs/tags/upstream/*'
 
-          UPSTREAM_TAG="$(git describe --tags --match 'upstream/v*' --abbrev=0 upstream/main)"
-          LATEST_TAG="${UPSTREAM_TAG#upstream/}"
+          # Read ref names directly: annotated tags retain their original name
+          # internally, which makes git describe add a suffix after namespacing.
+          LATEST_TAG=""
+          while IFS= read -r candidate; do
+            if [[ "$candidate" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              LATEST_TAG="$candidate"
+              break
+            fi
+          done <<< "$(git for-each-ref --merged upstream/main --sort=-version:refname --format='%(refname:strip=3)' refs/tags/upstream/)"
+          test -n "$LATEST_TAG"
           VERSION="${LATEST_TAG#v}"
           echo "Latest upstream tag: $LATEST_TAG (version $VERSION)"
           echo "tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
