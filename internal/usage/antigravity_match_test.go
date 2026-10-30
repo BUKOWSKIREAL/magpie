@@ -36,7 +36,7 @@ func TestAntigravityResponseIDMatchingAfterRebase(t *testing.T) {
 			if newest {
 				want = 1
 			}
-			if len(got) != 2 || !got[rowRef{local, want}] || !got[rowRef{local, 3}] {
+			if got.count() != 2 || !got.has(rowRef{local, want}) || !got.has(rowRef{local, 3}) {
 				t.Fatalf("packed=%v newest=%v: matched %v; want response row %d and fallback row 3", packed, newest, got, want)
 			}
 		}

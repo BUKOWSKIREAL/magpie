@@ -1885,7 +1885,7 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip refSet, respon
 	for _, gateway := range gateways {
 		for i := range gateway.Rows {
 			ref := rowRef{gateway, i}
-			if reserved[ref] || used[ref] {
+			if reserved.has(ref) || used.has(ref) {
 				continue
 			}
 			p := &gateway.Rows[i]
@@ -1904,7 +1904,7 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip refSet, respon
 			for i := range open.Rows {
 				p := &open.Rows[i]
 				ref := rowRef{c, i}
-				if skip[ref] || reserved[ref] || matched[ref] || p.Time.Before(since) {
+				if skip.has(ref) || reserved.has(ref) || matched.has(ref) || p.Time.Before(since) {
 					continue
 				}
 				if id := open.Strings[open.text(p, 25)]; id != "" && len(byRespID[id]) > 0 {
@@ -1931,10 +1931,11 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip refSet, respon
 				if j >= len(byRespID[id]) {
 					break
 				}
-				if used[byRespID[id][j]] {
+				if used.has(byRespID[id][j]) {
 					continue
 				}
-				matched[ref.rowRef], used[byRespID[id][j]] = true, true
+				matched.add(ref.rowRef)
+				used.add(byRespID[id][j])
 			}
 		}
 	}
